@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/kubernetes/kompose/pkg/kobject"
+	"github.com/kubernetes/kompose/pkg/manifest"
 	"github.com/kubernetes/kompose/pkg/transformer"
 	"github.com/kubernetes/kompose/pkg/transformer/kubernetes"
 	deployapi "github.com/openshift/api/apps/v1"
@@ -263,6 +264,7 @@ func (o *OpenShift) Transform(komposeObject kobject.KomposeObject, opt kobject.C
 	if komposeObject.Namespace != "" {
 		ns := transformer.CreateNamespace(komposeObject.Namespace)
 		allobjects = append(allobjects, ns)
+		o.Provenance.NoteOption(manifest.StageTransformInitialize, "--namespace", ns)
 	}
 
 	var err error
@@ -277,6 +279,7 @@ func (o *OpenShift) Transform(komposeObject kobject.KomposeObject, opt kobject.C
 		}
 		for _, item := range secrets {
 			allobjects = append(allobjects, item)
+			o.Provenance.NoteRoot(manifest.StageTransformInitialize, item.Name, item)
 		}
 	}
 
@@ -426,10 +429,12 @@ func (o *OpenShift) Transform(komposeObject kobject.KomposeObject, opt kobject.C
 			}
 		}
 
+		o.Provenance.Note(name, manifest.StageTransformInitialize, objects...)
 		err := o.UpdateKubernetesObjects(name, service, opt, &objects)
 		if err != nil {
 			return nil, errors.Wrap(err, "Error transforming Kubernetes objects")
 		}
+		o.Provenance.Note(name, manifest.StageTransformPopulate, objects...)
 
 		allobjects = append(allobjects, objects...)
 	}

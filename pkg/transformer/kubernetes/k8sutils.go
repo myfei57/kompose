@@ -182,6 +182,30 @@ func getDirName(opt kobject.ConvertOptions) string {
 	return dirName
 }
 
+// ManifestOutputDir returns the directory where the traceability manifest is
+// written: the output directory when resources are emitted as separate
+// files, the chart root when --chart is used (never templates/, where Helm
+// would treat it as a resource), and the directory containing the single
+// output file otherwise.
+func ManifestOutputDir(opt kobject.ConvertOptions) string {
+	if opt.ToStdout {
+		return ""
+	}
+	if opt.OutFile == "" {
+		return getDirName(opt)
+	}
+	if fi, err := os.Stat(opt.OutFile); err == nil && fi.IsDir() {
+		return opt.OutFile
+	}
+	if strings.HasSuffix(opt.OutFile, "/") || strings.HasSuffix(opt.OutFile, string(os.PathSeparator)) {
+		return opt.OutFile
+	}
+	if dir := filepath.Dir(opt.OutFile); dir != "" && dir != "." {
+		return dir
+	}
+	return getDirName(opt)
+}
+
 // PrintList will take the data converted and decide on the commandline attributes given
 func PrintList(objects []runtime.Object, opt kobject.ConvertOptions) error {
 	var f *os.File

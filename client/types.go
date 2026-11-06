@@ -47,6 +47,12 @@ type ConvertOptions struct {
 	Profiles               []string
 	Provider
 	GenerateNetworkPolicies bool
+	// StoreManifest enables the traceability manifest written next to the
+	// generated resources.
+	StoreManifest bool
+	// ManifestPageSize sets the number of object records per manifest page.
+	// A value <= 0 uses the package default.
+	ManifestPageSize int
 }
 
 type Provider interface{}

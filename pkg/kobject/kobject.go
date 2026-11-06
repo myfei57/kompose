@@ -93,6 +93,11 @@ type ConvertOptions struct {
 	SecretsAsFiles          bool
 	GenerateNetworkPolicies bool
 	NoInterpolate           bool
+
+	// ManifestPageSize is the number of object records stored in a single
+	// page of the traceability manifest. It is only used when StoreManifest
+	// is enabled. A value <= 0 falls back to the package default.
+	ManifestPageSize int
 }
 
 // IsPodController indicate if the user want to use a controller

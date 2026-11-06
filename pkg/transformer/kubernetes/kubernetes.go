@@ -33,6 +33,7 @@ import (
 	"github.com/fatih/structs"
 	"github.com/kubernetes/kompose/pkg/kobject"
 	"github.com/kubernetes/kompose/pkg/loader/compose"
+	"github.com/kubernetes/kompose/pkg/manifest"
 	"github.com/kubernetes/kompose/pkg/transformer"
 	"github.com/mattn/go-shellwords"
 	deployapi "github.com/openshift/api/apps/v1"
@@ -55,6 +56,11 @@ import (
 type Kubernetes struct {
 	// the user provided options from the command line
 	Opt kobject.ConvertOptions
+
+	// Provenance is an optional side-channel tracker used to build the
+	// traceability manifest. It is never read by the conversion logic:
+	// leaving it nil does not change any converted object.
+	Provenance *manifest.Tracker
 }
 
 // PVCRequestSize (Persistent Volume Claim) has default size
@@ -1553,12 +1559,14 @@ func (k *Kubernetes) Transform(komposeObject kobject.KomposeObject, opt kobject.
 		}
 		for _, item := range secrets {
 			allobjects = append(allobjects, item)
+			k.Provenance.NoteRoot(manifest.StageTransformInitialize, item.Name, item)
 		}
 	}
 
 	if komposeObject.Namespace != "" {
 		ns := transformer.CreateNamespace(komposeObject.Namespace)
 		allobjects = append(allobjects, ns)
+		k.Provenance.NoteOption(manifest.StageTransformInitialize, "--namespace", ns)
 	}
 
 	if opt.ServiceGroupMode != "" {
@@ -1603,6 +1611,7 @@ func (k *Kubernetes) Transform(komposeObject kobject.KomposeObject, opt kobject.
 
 				log.Infof("Group Service %s to [%s]", service.Name, groupName)
 				service.WithKomposeAnnotation = opt.WithKomposeAnnotation
+				k.Provenance.Note(service.Name, manifest.StageTransformInitialize, objects...)
 				podSpec.Append(AddContainer(service, opt))
 
 				if err := buildServiceImage(opt, service, service.Name); err != nil {
@@ -1666,6 +1675,7 @@ func (k *Kubernetes) Transform(komposeObject kobject.KomposeObject, opt kobject.
 						return nil, err
 					}
 				}
+				k.Provenance.Note(service.Name, manifest.StageTransformPopulate, objects...)
 			}
 
 			allobjects = append(allobjects, objects...)
@@ -1703,6 +1713,7 @@ func (k *Kubernetes) Transform(komposeObject kobject.KomposeObject, opt kobject.
 		} else {
 			objects = k.CreateWorkloadAndConfigMapObjects(name, service, opt)
 		}
+		k.Provenance.Note(name, manifest.StageTransformInitialize, objects...)
 		if opt.Controller == StatefulStateController {
 			service.ServiceType = "Headless"
 		}
@@ -1720,6 +1731,7 @@ func (k *Kubernetes) Transform(komposeObject kobject.KomposeObject, opt kobject.
 		if err != nil {
 			return nil, errors.Wrap(err, "Error creating Kubernetes HPA")
 		}
+		k.Provenance.Note(name, manifest.StageTransformPopulate, objects...)
 		allobjects = append(allobjects, objects...)
 	}
 

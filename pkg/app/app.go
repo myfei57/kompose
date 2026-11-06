@@ -29,6 +29,7 @@ import (
 
 	"github.com/kubernetes/kompose/pkg/kobject"
 	"github.com/kubernetes/kompose/pkg/loader"
+	"github.com/kubernetes/kompose/pkg/manifest"
 	"github.com/kubernetes/kompose/pkg/transformer"
 	"github.com/kubernetes/kompose/pkg/transformer/kubernetes"
 	"github.com/kubernetes/kompose/pkg/transformer/openshift"
@@ -253,6 +254,19 @@ func Convert(opt kobject.ConvertOptions) ([]runtime.Object, error) {
 	// Get a transformer that maps komposeObject to provider's primitives
 	t := getTransformer(opt)
 
+	// The provenance tracker is a pure side channel: it never influences
+	// the conversion result, so it is only attached when requested.
+	var tracker *manifest.Tracker
+	if opt.StoreManifest {
+		tracker = manifest.NewTracker()
+		switch tr := t.(type) {
+		case *kubernetes.Kubernetes:
+			tr.Provenance = tracker
+		case *openshift.OpenShift:
+			tr.Kubernetes.Provenance = tracker
+		}
+	}
+
 	// Do the transformation
 	objects, err := t.Transform(komposeObject, opt)
 
@@ -265,7 +279,47 @@ func Convert(opt kobject.ConvertOptions) ([]runtime.Object, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Build and store the traceability manifest. This runs after the
+	// conversion and only reads the generated objects.
+	if opt.StoreManifest {
+		storeTraceabilityManifest(t, tracker, objects, komposeObject, opt)
+	}
+
 	return objects, err
+}
+
+// storeTraceabilityManifest builds the manifest from the converted objects
+// and writes it next to the generated resources.
+func storeTraceabilityManifest(t transformer.Transformer, tracker *manifest.Tracker, objects []runtime.Object, komposeObject kobject.KomposeObject, opt kobject.ConvertOptions) {
+	if opt.ToStdout {
+		log.Warn("Traceability manifest is not written to disk when --stdout is set")
+		return
+	}
+
+	documentIndex := manifest.ScanDocuments(opt.InputFiles)
+
+	var conversionManifest *manifest.Manifest
+	switch tr := t.(type) {
+	case *kubernetes.Kubernetes:
+		conversionManifest = tr.BuildManifest(objects, tracker, komposeObject, opt, documentIndex)
+	case *openshift.OpenShift:
+		conversionManifest = tr.BuildManifest(objects, tracker, komposeObject, opt, documentIndex)
+	default:
+		log.Warn("Traceability manifest is not supported by the selected provider")
+		return
+	}
+
+	dir := kubernetes.ManifestOutputDir(opt)
+	mainPath, pagePaths, err := manifest.Save(conversionManifest, dir, opt.GenerateJSON, opt.ManifestPageSize)
+	if err != nil {
+		log.Warnf("Unable to write traceability manifest: %s", err)
+		return
+	}
+	log.Printf("Kubernetes manifest %q created", mainPath)
+	if len(pagePaths) > 0 {
+		log.Printf("Kubernetes manifest stored in %d page(s) under %q", len(pagePaths), filepath.Join(dir, "manifest-pages"))
+	}
 }
 
 // Convenience method to return the appropriate Transformer based on

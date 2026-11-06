@@ -77,6 +77,13 @@ var (
 	// be the default for kompose, but we must keep compatibility with the previous behavior.
 	// See https://github.com/kubernetes/kompose/issues/1280 for more details.
 	SecretsAsFiles bool
+
+	// StoreManifest enables the traceability manifest recording the source
+	// service, input field paths and conversion stages of each object.
+	ConvertStoreManifest bool
+	// ConvertManifestPageSize sets the page size used when the manifest is
+	// stored as multiple pages.
+	ConvertManifestPageSize int
 )
 
 var convertCmd = &cobra.Command{
@@ -133,6 +140,8 @@ var convertCmd = &cobra.Command{
 			BuildCommand:                BuildCommand,
 			PushCommand:                 PushCommand,
 			Namespace:                   ConvertNamespace,
+			StoreManifest:               ConvertStoreManifest,
+			ManifestPageSize:            ConvertManifestPageSize,
 		}
 
 		if ServiceGroupMode == "" && MultipleContainerMode {
@@ -207,6 +216,8 @@ func init() {
 
 	convertCmd.Flags().BoolVar(&WithKomposeAnnotation, "with-kompose-annotation", true, "Add kompose annotations to generated resource")
 	convertCmd.Flags().BoolVar(&NoInterpolate, "no-interpolate", false, "Keep environment variable names in the Compose file")
+	convertCmd.Flags().BoolVar(&ConvertStoreManifest, "store-manifest", false, "Store a traceability manifest recording the source service, input field paths and conversion stages of each generated object")
+	convertCmd.Flags().IntVar(&ConvertManifestPageSize, "manifest-page-size", 0, "Number of object records per page in the traceability manifest (default 100)")
 
 	// Deprecated commands
 	convertCmd.Flags().BoolVar(&ConvertEmptyVols, "emptyvols", false, "Use Empty Volumes. Do not generate PVCs")
